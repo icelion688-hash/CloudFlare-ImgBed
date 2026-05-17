@@ -39,6 +39,8 @@ import {
     sampleN,
     sortRecords,
     getFacetsConfig,
+    parseImageSizeParams,
+    appendSizeParams,
 } from "../utils/filterPipeline.js";
 
 const corsHeaders = {
@@ -74,6 +76,8 @@ export async function onRequest(context) {
 
     const facetsConfig = await getFacetsConfig(env);
     const params = parseFilterParams(url.searchParams, facetsConfig);
+    // 解析图片尺寸缩放参数
+    const sizeParams = parseImageSizeParams(url.searchParams);
 
     if (!isDirAllowed(params.dir, allowedDirRaw)) {
         return json({ error: 'Directory not allowed' }, 403);
@@ -118,12 +122,12 @@ export async function onRequest(context) {
     const page = list.slice(offset, offset + limit);
 
     if (!wantFull) {
-        const urls = page.map(r => url.origin + '/file/' + r.name);
+        const urls = page.map(r => url.origin + appendSizeParams('/file/' + r.name, sizeParams));
         return json({ total, offset, limit, urls });
     }
 
     const files = page.map(r => {
-        const path = '/file/' + r.name;
+        const path = appendSizeParams('/file/' + r.name, sizeParams);
         const ratio = (r.Width && r.Height) ? Math.round((r.Width / r.Height) * 1000) / 1000 : null;
         return {
             id: r.name,

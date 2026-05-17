@@ -32,7 +32,7 @@
  */
 import { fetchOthersConfig } from "../utils/sysConfig";
 import { readIndex } from "../utils/indexManager.js";
-import { getFacetsConfig, jaccardSimilarity } from "../utils/filterPipeline.js";
+import { getFacetsConfig, jaccardSimilarity, parseImageSizeParams, appendSizeParams } from "../utils/filterPipeline.js";
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -93,6 +93,8 @@ export async function onRequest(context) {
     }
     // 兼容 /file/xxx 写法
     id = id.replace(/^\/+/, '').replace(/^file\//, '');
+    // 解析图片尺寸缩放参数
+    const sizeParams = parseImageSizeParams(url.searchParams);
 
     const count = Math.min(100, Math.max(1, parseInt(url.searchParams.get('count'), 10) || 12));
     const minScore = parseFloat(url.searchParams.get('minScore'));
@@ -170,7 +172,7 @@ export async function onRequest(context) {
     const respType = url.searchParams.get('type');
     const respForm = url.searchParams.get('form');
     if (count === 1 && top.length > 0) {
-        const path = '/file/' + top[0].id;
+        const path = appendSizeParams('/file/' + top[0].id, sizeParams);
         if (respType === 'img') {
             const r = await fetch(url.origin + path);
             return new Response(r.body, {
@@ -189,8 +191,8 @@ export async function onRequest(context) {
         total: scored.length,
         results: top.map(r => ({
             id: r.id,
-            url: url.origin + '/file/' + r.id,
-            path: '/file/' + r.id,
+            url: url.origin + appendSizeParams('/file/' + r.id, sizeParams),
+            path: appendSizeParams('/file/' + r.id, sizeParams),
             score: r.score,
             tags: r.tags,
             width: r.width,

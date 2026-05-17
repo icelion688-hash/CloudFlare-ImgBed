@@ -8,6 +8,8 @@ import {
     createSeededRandom,
     sampleN,
     getFacetsConfig,
+    parseImageSizeParams,
+    appendSizeParams,
 } from "../utils/filterPipeline.js";
 
 const corsHeaders = {
@@ -35,6 +37,8 @@ export async function onRequest(context) {
 
     const facetsConfig = await getFacetsConfig(env);
     const params = parseFilterParams(requestUrl.searchParams, facetsConfig);
+    // 解析图片尺寸缩放参数
+    const sizeParams = parseImageSizeParams(requestUrl.searchParams);
 
     if (!isDirAllowed(params.dir, allowedDirRaw)) {
         return new Response(JSON.stringify({ error: "Directory not allowed" }), {
@@ -84,7 +88,7 @@ export async function onRequest(context) {
     // 批量模式
     if (batchCount > 1) {
         const urls = picked.map(rec => {
-            const p = '/file/' + rec.name;
+            const p = appendSizeParams('/file/' + rec.name, sizeParams);
             return randomType === 'url' ? requestUrl.origin + p : p;
         });
         if (resType === 'text') {
@@ -97,7 +101,7 @@ export async function onRequest(context) {
 
     // 单张模式
     const randomKey = picked[0];
-    const randomPath = '/file/' + randomKey.name;
+    const randomPath = appendSizeParams('/file/' + randomKey.name, sizeParams);
     let randomUrl = randomPath;
 
     if (randomType === 'url') {

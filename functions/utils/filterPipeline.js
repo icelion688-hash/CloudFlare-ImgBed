@@ -282,4 +282,55 @@ export function jaccardSimilarity(setA, arrB) {
     return union === 0 ? 0 : intersect / union;
 }
 
+// 尺寸预设映射
+const SIZE_PRESETS = {
+    thumb:    { w: 400,  q: 60 },
+    small:    { w: 640,  q: 75 },
+    medium:   { w: 1024, q: 80 },
+    large:    { w: 1920, q: 85 },
+};
+
+/**
+ * 从请求参数中解析图片尺寸参数
+ * @param {URLSearchParams} sp
+ * @returns {Object|null} 尺寸参数对象，无参数时返回 null
+ */
+export function parseImageSizeParams(sp) {
+    const size = sp.get('size');
+    const w = sp.get('w');
+    const h = sp.get('h');
+    const q = sp.get('q');
+    const f = sp.get('f');
+
+    // 如果没有任何尺寸参数，返回 null
+    if (!size && !w && !h && !q && !f) return null;
+    if (size === 'original') return null;
+
+    const preset = SIZE_PRESETS[size] || {};
+    return {
+        w: parseInt(w, 10) || preset.w || null,
+        h: parseInt(h, 10) || null,
+        q: parseInt(q, 10) || preset.q || null,
+        f: f || null,
+    };
+}
+
+/**
+ * 将尺寸参数附加到图片路径上
+ * @param {string} path - 图片路径
+ * @param {Object|null} sizeParams - parseImageSizeParams() 的返回值
+ * @returns {string} 附加参数后的路径
+ */
+export function appendSizeParams(path, sizeParams) {
+    if (!sizeParams) return path;
+    const parts = [];
+    if (sizeParams.w) parts.push('w=' + sizeParams.w);
+    if (sizeParams.h) parts.push('h=' + sizeParams.h);
+    if (sizeParams.q) parts.push('q=' + sizeParams.q);
+    if (sizeParams.f) parts.push('f=' + sizeParams.f);
+    if (parts.length === 0) return path;
+    const sep = path.includes('?') ? '&' : '?';
+    return path + sep + parts.join('&');
+}
+
 export { getFacetsConfig };

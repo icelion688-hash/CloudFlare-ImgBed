@@ -109,7 +109,7 @@ header.top h1 { margin: 0; font-size: 19px; font-weight: 600; }
 <div class="app">
   <header class="top">
     <div>
-      <h1>🎨 随机图 API 构造器 <span class="pill" style="font-size:10px;">v2 · 构造 · 浏览 · 相似 · 每日</span></h1>
+      <h1>🎨 随机图 API 构造器 <span class="pill" style="font-size:10px;">v2 · 构造 · 浏览 · 相似 · 每日 · 定时</span></h1>
       <div class="stat" id="stat">正在加载…</div>
     </div>
     <a class="btn" href="/" target="_blank">返回首页</a>
@@ -130,6 +130,7 @@ header.top h1 { margin: 0; font-size: 19px; font-weight: 600; }
           <span class="mode-tab" data-mode="gallery">画廊查询 /api/query</span>
           <span class="mode-tab" data-mode="daily">每日固定 /random/daily</span>
           <span class="mode-tab" data-mode="similar">相似图 /random/similar</span>
+          <span class="mode-tab" data-mode="interval">定时刷新 /random/interval</span>
         </div>
       </div>
 
@@ -175,6 +176,46 @@ header.top h1 { margin: 0; font-size: 19px; font-weight: 600; }
               <option value="url">完整 URL</option>
               <option value="img">直接图片</option>
             </select>
+          </div>
+        </div>
+        <!-- 图片尺寸参数 -->
+        <div class="field" style="margin-top: 12px;">
+          <label style="font-size:12px; font-weight:600; color:var(--text); margin-bottom:8px;">图片尺寸</label>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>预设尺寸 (size)</label>
+            <select class="select" id="sizeSelect">
+              <option value="">原图 (默认)</option>
+              <option value="thumb">缩略图 (400px)</option>
+              <option value="small">小图 (640px)</option>
+              <option value="medium">中图 (1024px)</option>
+              <option value="large">大图 (1920px)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>格式 (f)</label>
+            <select class="select" id="formatSelect">
+              <option value="">自动 (默认)</option>
+              <option value="webp">WebP</option>
+              <option value="avif">AVIF</option>
+              <option value="jpeg">JPEG</option>
+              <option value="png">PNG</option>
+            </select>
+          </div>
+        </div>
+        <div class="row-3">
+          <div class="field">
+            <label>自定义宽度 (w)</label>
+            <input class="input" type="number" id="customWidthInput" min="1" placeholder="例如 800">
+          </div>
+          <div class="field">
+            <label>自定义高度 (h)</label>
+            <input class="input" type="number" id="customHeightInput" min="1" placeholder="例如 600">
+          </div>
+          <div class="field">
+            <label>质量 (q) <span class="helper" style="display:inline">1-100</span></label>
+            <input class="input" type="number" id="qualityInput" min="1" max="100" placeholder="80">
           </div>
         </div>
       </div>
@@ -253,6 +294,27 @@ header.top h1 { margin: 0; font-size: 19px; font-weight: 600; }
             <div class="field">
               <label>指定日期 (date, 可选)</label>
               <input class="input" type="text" id="dateInput" placeholder="YYYY-MM-DD">
+            </div>
+          </div>
+        </div>
+
+        <!-- interval 专属 -->
+        <div id="intervalParams" style="display:none;">
+          <div class="row">
+            <div class="field">
+              <label>刷新间隔</label>
+              <select class="select" id="intervalPresetSelect">
+                <option value="3600">1 小时</option>
+                <option value="21600">6 小时</option>
+                <option value="43200">12 小时</option>
+                <option value="86400">1 天</option>
+                <option value="604800">1 周</option>
+                <option value="custom">自定义…</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>自定义秒数 (interval)</label>
+              <input class="input" type="number" id="intervalCustomInput" min="60" max="604800" placeholder="60~604800" disabled>
             </div>
           </div>
         </div>
@@ -398,6 +460,21 @@ header.top h1 { margin: 0; font-size: 19px; font-weight: 600; }
     const mh = parseInt($('minHeightInput').value) || 0;
     if (mw > 0) params.set('minWidth', String(mw));
     if (mh > 0) params.set('minHeight', String(mh));
+    // 图片尺寸参数
+    const sizeVal = $('sizeSelect').value;
+    if (sizeVal) {
+      params.set('size', sizeVal);
+    } else {
+      // 预设为原图时，使用自定义宽高
+      const cw = parseInt($('customWidthInput').value) || 0;
+      const ch = parseInt($('customHeightInput').value) || 0;
+      if (cw > 0) params.set('w', String(cw));
+      if (ch > 0) params.set('h', String(ch));
+    }
+    const qVal = parseInt($('qualityInput').value) || 0;
+    if (qVal > 0 && qVal <= 100) params.set('q', String(qVal));
+    const fVal = $('formatSelect').value;
+    if (fVal) params.set('f', fVal);
     return params;
   }
 
@@ -433,6 +510,16 @@ header.top h1 { margin: 0; font-size: 19px; font-weight: 600; }
       if ($('dateInput').value.trim()) p.set('date', $('dateInput').value.trim());
       if ($('typeSelect').value) p.set('type', $('typeSelect').value);
       return path + (p.toString() ? '?' + p : '');
+    }
+    if (state.mode === 'interval') {
+      path = '/random/interval';
+      const preset = $('intervalPresetSelect').value;
+      const intervalVal = preset === 'custom'
+        ? (parseInt($('intervalCustomInput').value) || 3600)
+        : parseInt(preset);
+      p.set('interval', String(intervalVal));
+      if ($('typeSelect').value) p.set('type', $('typeSelect').value);
+      return path + '?' + p;
     }
     if (state.mode === 'similar') {
       path = '/random/similar';
@@ -528,7 +615,7 @@ header.top h1 { margin: 0; font-size: 19px; font-weight: 600; }
   function renderModeUI() {
     const hide = (id) => $(id).style.display = 'none';
     const show = (id, d = 'block') => $(id).style.display = d;
-    hide('batchParams'); hide('galleryParams'); hide('dailyParams'); hide('similarParams');
+    hide('batchParams'); hide('galleryParams'); hide('dailyParams'); hide('similarParams'); hide('intervalParams');
     $('modeHint').textContent = '';
     $('pager').style.display = 'none';
     document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === state.mode));
@@ -545,6 +632,10 @@ header.top h1 { margin: 0; font-size: 19px; font-weight: 600; }
       show('dailyParams');
       $('modeHint').textContent = '当日跨请求返回同一张';
     }
+    if (state.mode === 'interval') {
+      show('intervalParams');
+      $('modeHint').textContent = '自定义间隔定时刷新';
+    }
     if (state.mode === 'similar') {
       show('similarParams');
       $('modeHint').textContent = '按 tag 重叠度匹配';
@@ -557,7 +648,7 @@ header.top h1 { margin: 0; font-size: 19px; font-weight: 600; }
     const imgAbs = (() => {
       try {
         const u = new URL(abs);
-        if (state.mode === 'random' || state.mode === 'daily' || state.mode === 'batch') {
+        if (state.mode === 'random' || state.mode === 'daily' || state.mode === 'batch' || state.mode === 'interval') {
           if (!u.searchParams.has('type')) u.searchParams.set('type', 'img');
         }
         return u.toString();
@@ -595,7 +686,7 @@ header.top h1 { margin: 0; font-size: 19px; font-weight: 600; }
     const rel = buildUrl();
     const area = $('previewArea');
 
-    if (state.mode === 'random' || state.mode === 'daily') {
+    if (state.mode === 'random' || state.mode === 'daily' || state.mode === 'interval') {
       area.innerHTML = '<div class="preview-single"><div class="spinner"></div></div>';
       try {
         const u = new URL(fullUrl(rel));
@@ -878,12 +969,28 @@ header.top h1 { margin: 0; font-size: 19px; font-weight: 600; }
       t.addEventListener('click', () => switchMode(t.dataset.mode));
     });
     [$('dirSelect'), $('orientationSelect'), $('contentSelect'), $('typeSelect'),
-     $('sortSelect'), $('orderSelect'), $('tzSelect'), $('similarSameOrient')].forEach(el => {
+     $('sortSelect'), $('orderSelect'), $('tzSelect'), $('similarSameOrient'),
+     $('sizeSelect'), $('formatSelect'), $('intervalPresetSelect')].forEach(el => {
       el.addEventListener('change', () => { state.galleryOffset = 0; update(); });
+    });
+    // 预设尺寸选中时禁用自定义宽高
+    $('sizeSelect').addEventListener('change', () => {
+      const disabled = !!$('sizeSelect').value;
+      $('customWidthInput').disabled = disabled;
+      $('customHeightInput').disabled = disabled;
+      if (disabled) { $('customWidthInput').value = ''; $('customHeightInput').value = ''; }
+    });
+    // interval 预设切换时控制自定义输入框
+    $('intervalPresetSelect').addEventListener('change', () => {
+      const isCustom = $('intervalPresetSelect').value === 'custom';
+      $('intervalCustomInput').disabled = !isCustom;
+      if (!isCustom) $('intervalCustomInput').value = '';
     });
     [$('countInput'), $('seedInput'), $('minWidthInput'), $('minHeightInput'),
      $('tagsInput'), $('excludeInput'), $('limitInput'), $('dateInput'),
-     $('similarIdInput'), $('similarCount'), $('similarMinScore')].forEach(el => {
+     $('similarIdInput'), $('similarCount'), $('similarMinScore'),
+     $('customWidthInput'), $('customHeightInput'), $('qualityInput'),
+     $('intervalCustomInput')].forEach(el => {
       el.addEventListener('input', debounce(() => { state.galleryOffset = 0; update(); }, 220));
     });
 

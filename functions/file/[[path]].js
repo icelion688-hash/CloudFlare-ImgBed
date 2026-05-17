@@ -12,8 +12,95 @@ import {
 import { getDatabase } from '../utils/databaseAdapter.js';
 import { authenticate, AUTH_SCOPE } from '../utils/auth/authCore.js';
 
+// 图片缩放预设尺寸
+const SIZE_PRESETS = {
+    thumb:    { width: 400,  quality: 60 },
+    small:    { width: 640,  quality: 75 },
+    medium:   { width: 1024, quality: 80 },
+    large:    { width: 1920, quality: 85 },
+    original: null, // 不做任何缩放
+};
 
-export async function onRequest(context) {  // Contents of context object
+// 解析 URL 中的图片缩放参数
+function parseImageParams(url) {
+    const params = url.searchParams;
+
+    // 检查是否有预设尺寸参数
+    const size = params.get('size');
+    if (size) {
+        if (size === 'original' || !SIZE_PRESETS[size]) {
+            return null; // original 或未知预设，不缩放
+        }
+        const preset = SIZE_PRESETS[size];
+        return {
+            width: preset.width,
+            height: undefined,
+            quality: preset.quality,
+            format: 'auto',
+            fit: 'scale-down',
+        };
+    }
+
+    // 检查是否有独立的缩放参数
+    const w = params.get('w');
+    const h = params.get('h');
+    if (!w && !h) {
+        return null; // 没有缩放参数
+    }
+
+    return {
+        width: w ? parseInt(w, 10) : undefined,
+        height: h ? parseInt(h, 10) : undefined,
+        quality: parseInt(params.get('q'), 10) || 80,
+        format: params.get('f') || 'auto',
+        fit: params.get('fit') || 'scale-down',
+    };
+}
+
+export async function onRequest(context) {
+    const { request } = context;
+    const url = new URL(request.url);
+
+    // 防止递归：带 __no_transform 标记的请求直接走原始处理逻辑
+    if (url.searchParams.has('__no_transform')) {
+        url.searchParams.delete('__no_transform');
+        return await handleFileRequest(context);
+    }
+
+    const imageParams = parseImageParams(url);
+    if (!imageParams) {
+        return await handleFileRequest(context);
+    }
+
+    // 构建不带缩放参数的原始 URL，用于 cf.image 重新请求
+    const originalUrl = new URL(url);
+    ['w', 'h', 'q', 'f', 'fit', 'size', '__no_transform'].forEach(k => originalUrl.searchParams.delete(k));
+    originalUrl.searchParams.set('__no_transform', '1');
+
+    try {
+        const cfOptions = { image: {} };
+        if (imageParams.width) cfOptions.image.width = imageParams.width;
+        if (imageParams.height) cfOptions.image.height = imageParams.height;
+        if (imageParams.quality) cfOptions.image.quality = imageParams.quality;
+        if (imageParams.format) cfOptions.image.format = imageParams.format;
+        if (imageParams.fit) cfOptions.image.fit = imageParams.fit;
+
+        const transformed = await fetch(originalUrl.toString(), { cf: cfOptions });
+        if (transformed.ok) {
+            const headers = new Headers(transformed.headers);
+            headers.set('X-Image-Resized', 'true');
+            headers.set('Cache-Control', 'public, max-age=86400');
+            return new Response(transformed.body, { status: 200, headers });
+        }
+    } catch (e) {
+        // cf.image 不可用（如免费版），fallback 返回原图
+    }
+
+    // fallback: 返回原图
+    return await handleFileRequest(context);
+}
+
+async function handleFileRequest(context) {  // Contents of context object
     const {
         request, // same as existing Worker API
         env, // same as existing Worker API
