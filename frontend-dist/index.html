@@ -1,1 +1,43 @@
-<!doctype html><html lang=""><head><meta charset="utf-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="/static/media/logo.png"><link rel="apple-touch-icon" href="/static/media/logo.png"><link rel="mask-icon" href="/static/media/logo.png" color="#f4b400"><meta name="description" content="Sanyue ImgHub - A modern file hosting platform"><meta name="keywords" content="Sanyue, ImgHub, file hosting, image hosting, cloud storage"><meta name="author" content="SanyueQi"><title>Sanyue ImgHub</title><script defer="defer" src="/js/chunk-vendors.82c104b1.js"></script><script defer="defer" src="/js/app.164ae756.js"></script><link href="/css/chunk-vendors.f9cd4701.css" rel="stylesheet"><link href="/css/app.75711fde.css" rel="stylesheet"></head><body><noscript><strong>We're sorry but sanyue_imghub doesn't work properly without JavaScript enabled. Please enable it to continue.</strong></noscript><div id="app"></div></body></html>
+<!doctype html><html lang=""><head><meta charset="utf-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="/static/media/logo.png"><link rel="apple-touch-icon" href="/static/media/logo.png"><link rel="mask-icon" href="/static/media/logo.png" color="#f4b400"><meta name="description" content="Sanyue ImgHub - A modern file hosting platform"><meta name="keywords" content="Sanyue, ImgHub, file hosting, image hosting, cloud storage"><meta name="author" content="SanyueQi"><title>Sanyue ImgHub</title><script>
+(function(){
+  var POPPER_CLS='tabs-dropdown-popper';
+  var ITEM_CLS='el-dropdown-menu__item';
+  var INJECTED_ATTR='data-api-injected';
+  var API_PATH='/api-builder';
+
+  function injectApiTab(popper){
+    if(popper.getAttribute(INJECTED_ATTR)) return;
+    popper.setAttribute(INJECTED_ATTR,'1');
+    var menu=popper.querySelector('.el-dropdown-menu');
+    if(!menu) return;
+    var li=document.createElement('li');
+    li.setAttribute('tabindex','-1');
+    li.className=ITEM_CLS;
+    li.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="margin-right:5px;width:16px;height:16px;vertical-align:middle;fill:currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2l5 5h-5V4zM8 17h8v-1H8v1zm0-3h8v-1H8v1zm0-3h5V10H8v1z"/></svg> API \u7ba1\u7406';
+    li.style.cssText='display:flex;align-items:center;';
+    li.addEventListener('click',function(ev){
+      ev.stopPropagation();
+      window.open(API_PATH,'_blank');
+    });
+    menu.appendChild(li);
+  }
+
+  var observer=new MutationObserver(function(mutations){
+    for(var i=0;i<mutations.length;i++){
+      var nodes=mutations[i].addedNodes;
+      for(var j=0;j<nodes.length;j++){
+        var node=nodes[j];
+        if(node.nodeType===1){
+          if(node.classList&&node.classList.contains(POPPER_CLS)){
+            injectApiTab(node);
+          }else if(node.querySelector){
+            var p=node.querySelector('.'+POPPER_CLS);
+            if(p) injectApiTab(p);
+          }
+        }
+      }
+    }
+  });
+  observer.observe(document.documentElement,{childList:true,subtree:true});
+})();
+</script><script defer="defer" src="/js/chunk-vendors.82c104b1.js"></script><script defer="defer" src="/js/app.164ae756.js"></script><link href="/css/chunk-vendors.f9cd4701.css" rel="stylesheet"><link href="/css/app.75711fde.css" rel="stylesheet"></head><body><noscript><strong>We're sorry but sanyue_imghub doesn't work properly without JavaScript enabled. Please enable it to continue.</strong></noscript><div id="app"></div></body></html>

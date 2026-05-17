@@ -10,3 +10,6 @@ node_modules
 .kiro/
 .vscode/
 .claude/
+test-images/
+.playwright-mcp/
+.spec-workflow/
