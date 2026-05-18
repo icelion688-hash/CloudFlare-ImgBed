@@ -130,14 +130,20 @@ export async function onRequest(context) {
     const path = appendSizeParams(rawPath, sizeParams);
     const respForm = url.searchParams.get('form');
 
-    // 未显式指定 type 时，检测 Accept 头：浏览器通过 <img>/CSS background-image 加载时
-    // 会携带 Accept: image/*，此时自动以 img 模式响应，无需调用方手动加 type=img
+    // 未显式指定 type 时，按两个信号自动判断是否切换为 img 模式：
+    //   1. Accept: image/* —— 浏览器通过 <img>/CSS background-image 加载时携带
+    //   2. 存在尺寸参数（w/h/size/q）—— 调用方明确要求图片变换，JSON 无意义
+    // 两个条件任一满足即切为 img 模式，显式 type 参数始终优先
     const explicitType = url.searchParams.get('type');
     const acceptsImage = (request.headers.get('Accept') || '').includes('image/');
-    const respType = explicitType || (acceptsImage ? 'img' : null);
+    const hasSizeParams = !!(url.searchParams.get('w') || url.searchParams.get('h') ||
+        url.searchParams.get('size') || url.searchParams.get('q'));
+    const respType = explicitType || ((acceptsImage || hasSizeParams) ? 'img' : null);
 
     const cacheSec = Math.max(60, nextChangeIn); // 至少缓存 1 分钟，避免边界抖动
     const cacheHeader = `public, max-age=${cacheSec}`;
+    // Vary: Accept 确保 CDN 对 JSON 响应和图片响应分别缓存，避免 JSON 缓存污染图片请求
+    const varyHeader = { 'Vary': 'Accept' };
 
     if (respType === 'img') {
         const r = await fetch(url.origin + path);
@@ -155,7 +161,7 @@ export async function onRequest(context) {
     if (respForm === 'text') {
         return new Response(finalUrl, {
             status: 200,
-            headers: { 'Cache-Control': cacheHeader, ...corsHeaders }
+            headers: { 'Cache-Control': cacheHeader, ...varyHeader, ...corsHeaders }
         });
     }
     return json({
@@ -170,5 +176,5 @@ export async function onRequest(context) {
             height: picked.Height || null,
             tags: picked.Tags || [],
         }
-    }, 200, { 'Cache-Control': cacheHeader });
+    }, 200, { 'Cache-Control': cacheHeader, ...varyHeader });
 }
