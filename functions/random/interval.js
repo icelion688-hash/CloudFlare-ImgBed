@@ -128,8 +128,13 @@ export async function onRequest(context) {
 
     const rawPath = '/file/' + picked.name;
     const path = appendSizeParams(rawPath, sizeParams);
-    const respType = url.searchParams.get('type');
     const respForm = url.searchParams.get('form');
+
+    // 未显式指定 type 时，检测 Accept 头：浏览器通过 <img>/CSS background-image 加载时
+    // 会携带 Accept: image/*，此时自动以 img 模式响应，无需调用方手动加 type=img
+    const explicitType = url.searchParams.get('type');
+    const acceptsImage = (request.headers.get('Accept') || '').includes('image/');
+    const respType = explicitType || (acceptsImage ? 'img' : null);
 
     const cacheSec = Math.max(60, nextChangeIn); // 至少缓存 1 分钟，避免边界抖动
     const cacheHeader = `public, max-age=${cacheSec}`;
