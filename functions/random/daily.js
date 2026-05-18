@@ -175,15 +175,13 @@ export async function onRequest(context) {
     const path = appendSizeParams('/file/' + picked.name, sizeParams);
     const respForm = url.searchParams.get('form');
 
-    // 未显式指定 type 时，按两个信号自动判断是否切换为 img 模式：
-    //   1. Accept: image/* —— 浏览器通过 <img>/CSS background-image 加载时携带
-    //   2. 存在尺寸参数（w/h/size/q）—— 调用方明确要求图片变换，JSON 无意义
-    // 两个条件任一满足即切为 img 模式，显式 type 参数始终优先
+    // 未显式指定 type 时，检测 Accept 头：浏览器通过 <img>/CSS background-image 加载时
+    // 会携带 Accept: image/*，此时自动以 img 模式响应，无需调用方手动加 type=img。
+    // 注意：不能用尺寸参数（w/h/size/q）来推断 img 模式，因为前端预览等场景会带
+    // 尺寸参数同时期望 JSON 响应，强制切 img 会导致 JSON.parse 报错。
     const explicitType = url.searchParams.get('type');
     const acceptsImage = (request.headers.get('Accept') || '').includes('image/');
-    const hasSizeParams = !!(url.searchParams.get('w') || url.searchParams.get('h') ||
-        url.searchParams.get('size') || url.searchParams.get('q'));
-    const respType = explicitType || ((acceptsImage || hasSizeParams) ? 'img' : null);
+    const respType = explicitType || (acceptsImage ? 'img' : null);
 
     const cacheSec = secondsUntilNextDay(tz);
     const cacheHeader = `public, max-age=${cacheSec}`;
