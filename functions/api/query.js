@@ -42,6 +42,7 @@ import {
     parseImageSizeParams,
     appendSizeParams,
 } from "../utils/filterPipeline.js";
+import { checkPublicApiAuth } from "../utils/publicApiAuth.js";
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -72,6 +73,11 @@ export async function onRequest(context) {
     if (othersConfig.randomImageAPI?.enabled !== true) {
         return json({ error: 'Random API is disabled' }, 403);
     }
+
+    // 可选认证检查
+    const authResponse = await checkPublicApiAuth(context, corsHeaders);
+    if (authResponse) return authResponse;
+
     const allowedDirRaw = othersConfig.randomImageAPI.allowedDir || '';
 
     const facetsConfig = await getFacetsConfig(env);

@@ -86,6 +86,7 @@ export async function getOthersConfig(db, env) {
     settings.randomImageAPI = {
         enabled: kvRandomImageAPI.enabled ?? env.AllowRandom === 'true',
         allowedDir: kvRandomImageAPI.allowedDir ?? '',
+        requireAuth: kvRandomImageAPI.requireAuth ?? false,  // 是否要求 API Token（read 权限）才能调用公开查询接口
         fixed: false,
     }
 

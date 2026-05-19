@@ -1,6 +1,13 @@
 import { authenticate, AUTH_SCOPE } from "../../utils/auth/authCore.js";
+import { createCorsHandler } from "../../utils/corsHelper.js";
 
 const DEFAULT_MANAGE_CACHE_CONTROL = 'private, no-store, max-age=0';
+
+// 动态 CORS 中间件（管理接口需要更多 HTTP 方法）
+const corsHandler = createCorsHandler({
+    methods: 'GET, POST, DELETE, PUT, PATCH, OPTIONS',
+    headers: 'Content-Type, Authorization',
+});
 
 function withDefaultCacheControl(response) {
   if (response.headers.has('Cache-Control')) {
@@ -62,22 +69,8 @@ function extractRequiredPermission(pathname) {
   return 'manage';
 }
 
-// CORS 跨域响应头
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, DELETE, PUT, PATCH, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Max-Age': '86400',
-};
-
 async function authentication(context) {
-  // OPTIONS 预检请求不需要鉴权，直接返回 CORS 响应
-  if (context.request.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 204,
-      headers: corsHeaders
-    });
-  }
+  // OPTIONS 已在 corsHandler 中处理，不会到达此中间件
 
   const pathname = new URL(context.request.url).pathname;
   const requiredPermission = extractRequiredPermission(pathname);
@@ -96,4 +89,4 @@ async function authentication(context) {
   return context.next();
 }
 
-export const onRequest = [errorHandling, authentication];
+export const onRequest = [corsHandler, errorHandling, authentication];

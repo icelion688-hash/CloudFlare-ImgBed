@@ -1,32 +1,51 @@
 /* ======== 文件读取工具函数 ======== */
 
 // 判断请求域名是否在允许的域名列表中
+// 检查优先级：Origin 头 > Referer 头
+// 当无 Origin 且无 Referer 时（直接访问），允许通过
 export function isDomainAllowed(context) {
-    const { Referer, securityConfig, url } = context;
+    const { Referer, securityConfig, url, request } = context;
 
     const allowedDomains = securityConfig.access.allowedDomains;
 
-    if (Referer) {
+    // 未配置域名限制，允许所有访问
+    if (!allowedDomains || allowedDomains.trim() === '') {
+        return true;
+    }
+
+    // 构建域名白名单（含自身域名）
+    const domains = allowedDomains.split(',').map(d => d.trim()).filter(Boolean);
+    domains.push(url.hostname);
+
+    // 辅助函数：检查 hostname 是否匹配域名列表
+    const matchesDomain = (hostname) => {
+        return domains.some(domain => {
+            const pattern = new RegExp(`(^|\\.)${domain.replace(/\./g, '\\.')}$`);
+            return pattern.test(hostname);
+        });
+    };
+
+    // 优先检查 Origin 头（跨域请求必带，比 Referer 更可靠且不可被页面策略禁止）
+    const origin = request?.headers?.get('Origin');
+    if (origin) {
         try {
-            const refererUrl = new URL(Referer);
-            if (allowedDomains && allowedDomains.trim() !== '') {
-                const domains = allowedDomains.split(',');
-                domains.push(url.hostname);// 把自身域名加入白名单
-
-                let isAllowed = domains.some(domain => {
-                    let domainPattern = new RegExp(`(^|\\.)${domain.replace('.', '\\.')}$`); // Escape dot in domain
-                    return domainPattern.test(refererUrl.hostname);
-                });
-
-                if (!isAllowed) {
-                    return false;
-                }
-            }
+            return matchesDomain(new URL(origin).hostname);
         } catch (e) {
             return false;
         }
     }
 
+    // 检查 Referer 头
+    if (Referer) {
+        try {
+            return matchesDomain(new URL(Referer).hostname);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    // 无 Origin 且无 Referer → 直接访问（浏览器地址栏、curl、RSS 阅读器等）
+    // 这是合法的文件访问场景，允许通过
     return true;
 }
 

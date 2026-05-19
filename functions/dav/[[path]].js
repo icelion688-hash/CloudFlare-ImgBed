@@ -67,7 +67,13 @@ async function checkAuth(request, env) {
 
     const davUser = othersConfig.webDAV.username;
     const davPass = othersConfig.webDAV.password;
-    if (!davUser || !davPass) return null; // No auth required
+    if (!davUser || !davPass) {
+        // WebDAV 启用但未配置凭据，拒绝访问以防止未授权访问
+        return new Response('WebDAV credentials not configured. Please set username and password in admin settings.', {
+            status: 403,
+            headers: { 'WWW-Authenticate': 'Basic realm="WebDAV"' },
+        });
+    }
 
     const authHeader = request.headers.get('Authorization');
     if (!authHeader) {

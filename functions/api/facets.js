@@ -24,6 +24,7 @@
 import { fetchOthersConfig } from "../utils/sysConfig";
 import { readIndex } from "../utils/indexManager";
 import { getFacetsConfig } from "../utils/facetsConfig.js";
+import { checkPublicApiAuth } from "../utils/publicApiAuth.js";
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -57,6 +58,10 @@ export async function onRequest(context) {
                 headers: { 'Content-Type': 'application/json', ...corsHeaders }
             });
         }
+
+        // 可选认证检查
+        const authResponse = await checkPublicApiAuth(context, corsHeaders);
+        if (authResponse) return authResponse;
 
         const allowedDirRaw = othersConfig.randomImageAPI.allowedDir || '';
         const allowedDirs = allowedDirRaw.split(',')
