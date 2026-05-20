@@ -43,39 +43,23 @@ import {
     appendSizeParams,
 } from "../utils/filterPipeline.js";
 import { checkPublicApiAuth } from "../utils/publicApiAuth.js";
-
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Max-Age': '86400',
-};
-
-function json(body, status = 200, extraHeaders = {}) {
-    return new Response(JSON.stringify(body), {
-        status,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders, ...extraHeaders }
-    });
-}
+import { jsonResponse } from "../utils/responseHelper.js";
 
 export async function onRequest(context) {
     const { request, env } = context;
     const url = new URL(request.url);
 
-    if (request.method === 'OPTIONS') {
-        return new Response(null, { headers: corsHeaders });
-    }
     if (request.method !== 'GET') {
-        return json({ error: 'Method not allowed' }, 405);
+        return jsonResponse({ error: 'Method not allowed' }, 405);
     }
 
     const othersConfig = await fetchOthersConfig(env);
     if (othersConfig.randomImageAPI?.enabled !== true) {
-        return json({ error: 'Random API is disabled' }, 403);
+        return jsonResponse({ error: 'Random API is disabled' }, 403);
     }
 
     // 可选认证检查
-    const authResponse = await checkPublicApiAuth(context, corsHeaders);
+    const authResponse = await checkPublicApiAuth(context);
     if (authResponse) return authResponse;
 
     const allowedDirRaw = othersConfig.randomImageAPI.allowedDir || '';
@@ -86,7 +70,7 @@ export async function onRequest(context) {
     const sizeParams = parseImageSizeParams(url.searchParams);
 
     if (!isDirAllowed(params.dir, allowedDirRaw)) {
-        return json({ error: 'Directory not allowed' }, 403);
+        return jsonResponse({ error: 'Directory not allowed' }, 403);
     }
 
     // 解析方向
@@ -129,7 +113,7 @@ export async function onRequest(context) {
 
     if (!wantFull) {
         const urls = page.map(r => url.origin + appendSizeParams('/file/' + r.name, sizeParams));
-        return json({ total, offset, limit, urls });
+        return jsonResponse({ total, offset, limit, urls });
     }
 
     const files = page.map(r => {
@@ -151,7 +135,7 @@ export async function onRequest(context) {
         };
     });
 
-    return json({ total, offset, limit, sort, order, files }, 200, {
+    return jsonResponse({ total, offset, limit, sort, order, files }, 200, {
         'Cache-Control': 'public, max-age=60'
     });
 }

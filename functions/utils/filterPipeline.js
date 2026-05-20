@@ -11,7 +11,7 @@
 import { readIndex } from "./indexManager.js";
 import { resolveFacetValue, getFacetsConfig } from "./facetsConfig.js";
 
-const SQUARE_THRESHOLD = 0.1;
+export const SQUARE_THRESHOLD = 0.1;
 
 /**
  * 从 URLSearchParams 解析所有过滤参数（不含分页/排序）。
@@ -135,10 +135,11 @@ export async function loadCandidates(context, originUrl, params) {
     }));
 
     await cache.put(cacheUrl, new Response(JSON.stringify(allRecords), {
-        headers: { "Content-Type": "application/json" }
-    }), {
-        expirationTtl: 24 * 60 * 60
-    });
+        headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "public, max-age=86400",
+        }
+    }));
 
     return allRecords;
 }

@@ -22,26 +22,20 @@
  *     { url, path, score, tags, width, height }, ...
  *   ]
  * }
- *
- * 实现思路：
- *   1. 用全量索引找目标图，取出它的 Tags
- *   2. 候选集 = 同目录下所有正常图
- *   3. 对每张图算 Jaccard 相似度（tag 集合）
- *   4. 给分面 tag（已配置在 facets 中的 tag）加权，让"颜色+主题"匹配优先
- *   5. 按 score 排序，截 topN
  */
 import { fetchOthersConfig } from "../utils/sysConfig";
 import { readIndex } from "../utils/indexManager.js";
-import { getFacetsConfig, jaccardSimilarity, parseImageSizeParams, appendSizeParams } from "../utils/filterPipeline.js";
-
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Max-Age': '86400',
-};
-
-const SQUARE_THRESHOLD = 0.1;
+import {
+    getFacetsConfig,
+    jaccardSimilarity,
+    parseImageSizeParams,
+    appendSizeParams,
+    SQUARE_THRESHOLD,
+} from "../utils/filterPipeline.js";
+import {
+    jsonResponse,
+    fetchImageWithRetry,
+} from "../utils/responseHelper.js";
 
 function classifyOrientation(w, h) {
     if (!w || !h) return null;
@@ -49,13 +43,6 @@ function classifyOrientation(w, h) {
     if (r > 1 + SQUARE_THRESHOLD) return 'landscape';
     if (r < 1 - SQUARE_THRESHOLD) return 'portrait';
     return 'square';
-}
-
-function json(body, status = 200, extra = {}) {
-    return new Response(JSON.stringify(body), {
-        status,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders, ...extra }
-    });
 }
 
 /**
@@ -75,21 +62,18 @@ export async function onRequest(context) {
     const { request, env } = context;
     const url = new URL(request.url);
 
-    if (request.method === 'OPTIONS') {
-        return new Response(null, { headers: corsHeaders });
-    }
     if (request.method !== 'GET') {
-        return json({ error: 'Method not allowed' }, 405);
+        return jsonResponse({ error: 'Method not allowed' }, 405);
     }
 
     const othersConfig = await fetchOthersConfig(env);
     if (othersConfig.randomImageAPI?.enabled !== true) {
-        return json({ error: 'Random is disabled' }, 403);
+        return jsonResponse({ error: 'Random is disabled' }, 403);
     }
 
     let id = (url.searchParams.get('id') || '').trim();
     if (!id) {
-        return json({ error: 'Parameter "id" is required' }, 400);
+        return jsonResponse({ error: 'Parameter "id" is required' }, 400);
     }
     // 兼容 /file/xxx 写法
     id = id.replace(/^\/+/, '').replace(/^file\//, '');
@@ -115,11 +99,11 @@ export async function onRequest(context) {
     // 找到目标图
     const target = files.find(f => f.id === id);
     if (!target) {
-        return json({ error: 'Target image not found or not accessible' }, 404);
+        return jsonResponse({ error: 'Target image not found or not accessible' }, 404);
     }
     const targetTags = (target.metadata?.Tags || []).map(t => t.toLowerCase());
     if (targetTags.length === 0) {
-        return json({
+        return jsonResponse({
             target: { id: target.id, tags: [] },
             total: 0,
             results: [],
@@ -174,19 +158,15 @@ export async function onRequest(context) {
     if (count === 1 && top.length > 0) {
         const path = appendSizeParams('/file/' + top[0].id, sizeParams);
         if (respType === 'img') {
-            const r = await fetch(url.origin + path);
-            return new Response(r.body, {
-                status: r.status,
-                headers: { 'Content-Type': r.headers.get('content-type') || 'image/jpeg', ...corsHeaders }
-            });
+            return fetchImageWithRetry(url.origin + path);
         }
         const finalUrl = respType === 'url' ? url.origin + path : path;
         if (respForm === 'text') {
-            return new Response(finalUrl, { status: 200, headers: corsHeaders });
+            return new Response(finalUrl, { status: 200 });
         }
     }
 
-    return json({
+    return jsonResponse({
         target: { id: target.id, tags: target.metadata?.Tags || [] },
         total: scored.length,
         results: top.map(r => ({

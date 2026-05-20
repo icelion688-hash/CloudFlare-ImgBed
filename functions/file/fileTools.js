@@ -76,7 +76,8 @@ export const FILE_CACHE_CONTROL = {
 // 公共响应头设置函数
 export function setCommonHeaders(headers, encodedFileName, fileType, cacheControl = FILE_CACHE_CONTROL.PUBLIC) {
     headers.set('Content-Disposition', `inline; filename="${encodedFileName}"; filename*=UTF-8''${encodedFileName}`);
-    headers.set('Access-Control-Allow-Origin', '*');
+    // CORS 头由 _middleware.js 中的 corsHandler 统一设置（支持 allowedDomains 白名单），
+    // 此处不再硬编码 Access-Control-Allow-Origin，避免覆盖中间件的动态策略。
     headers.set('Accept-Ranges', 'bytes');
     headers.set('Vary', 'Range');
 
@@ -102,7 +103,11 @@ export function handleHeadRequest(headers, etag = null) {
     responseHeaders.set('Content-Length', headers.get('Content-Length') || '0');
     responseHeaders.set('Content-Type', headers.get('Content-Type') || 'application/octet-stream');
     responseHeaders.set('Content-Disposition', headers.get('Content-Disposition') || 'inline');
-    responseHeaders.set('Access-Control-Allow-Origin', headers.get('Access-Control-Allow-Origin') || '*');
+    // CORS 头由中间件设置，此处仅转发已有值
+    const acao = headers.get('Access-Control-Allow-Origin');
+    if (acao) {
+        responseHeaders.set('Access-Control-Allow-Origin', acao);
+    }
     responseHeaders.set('Accept-Ranges', headers.get('Accept-Ranges') || 'bytes');
     responseHeaders.set('Cache-Control', headers.get('Cache-Control') || 'public, max-age=2592000');
 

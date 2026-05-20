@@ -36,35 +36,24 @@ import {
     parseImageSizeParams,
     appendSizeParams,
 } from "../utils/filterPipeline.js";
-
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Max-Age': '86400',
-};
-
-function json(body, status = 200, extra = {}) {
-    return new Response(JSON.stringify(body), {
-        status,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders, ...extra }
-    });
-}
+import {
+    jsonResponse,
+    fetchImageWithRetry,
+    parseResponseMode,
+    buildFilterFingerprint,
+} from "../utils/responseHelper.js";
 
 export async function onRequest(context) {
     const { request, env } = context;
     const url = new URL(request.url);
 
-    if (request.method === 'OPTIONS') {
-        return new Response(null, { headers: corsHeaders });
-    }
     if (request.method !== 'GET') {
-        return json({ error: 'Method not allowed' }, 405);
+        return jsonResponse({ error: 'Method not allowed' }, 405);
     }
 
     const othersConfig = await fetchOthersConfig(env);
     if (othersConfig.randomImageAPI?.enabled !== true) {
-        return json({ error: 'Random is disabled' }, 403);
+        return jsonResponse({ error: 'Random is disabled' }, 403);
     }
     const allowedDirRaw = othersConfig.randomImageAPI.allowedDir || '';
 
@@ -75,7 +64,7 @@ export async function onRequest(context) {
         : null;
 
     if (interval === null) {
-        return json({
+        return jsonResponse({
             error: 'Invalid or missing "interval" parameter. Must be an integer between 60 and 604800 (7 days).'
         }, 400);
     }
@@ -85,7 +74,7 @@ export async function onRequest(context) {
     const sizeParams = parseImageSizeParams(url.searchParams);
 
     if (!isDirAllowed(params.dir, allowedDirRaw)) {
-        return json({ error: 'Directory not allowed' }, 403);
+        return jsonResponse({ error: 'Directory not allowed' }, 403);
     }
 
     let resolvedOrientation = params.orientation;
@@ -108,61 +97,36 @@ export async function onRequest(context) {
     const nextChangeIn = interval - (nowSec % interval);
 
     // 生成 seed：包含 interval、periodIndex 和过滤条件指纹
-    const fingerprint = [
-        params.dir,
-        params.includeTags.slice().sort().join(','),
-        params.excludeTags.slice().sort().join(','),
-        params.anyTagGroups.map(g => g.slice().sort().join('|')).join(';'),
-        resolvedOrientation,
-        params.minWidth, params.minHeight, params.maxWidth, params.maxHeight,
-        params.fileType.slice().sort().join(','),
-    ].join('::');
+    const fingerprint = buildFilterFingerprint(params, resolvedOrientation);
     const seed = `interval-${periodIndex}-${fingerprint}`;
 
     if (list.length === 0) {
-        return json({ interval, periodIndex, nextChangeIn, seed, total: 0, url: null }, 200);
+        return jsonResponse({ interval, periodIndex, nextChangeIn, seed, total: 0, url: null }, 200);
     }
 
     const rand = createSeededRandom(seed);
     const [picked] = sampleN(list, 1, rand);
 
-    const rawPath = '/file/' + picked.name;
-    const path = appendSizeParams(rawPath, sizeParams);
-    const respForm = url.searchParams.get('form');
-
-    // 未显式指定 type 时，检测 Accept 头：浏览器通过 <img>/CSS background-image 加载时
-    // 会携带 Accept: image/*，此时自动以 img 模式响应，无需调用方手动加 type=img。
-    // 注意：不能用尺寸参数（w/h/size/q）来推断 img 模式，因为前端预览等场景会带
-    // 尺寸参数同时期望 JSON 响应，强制切 img 会导致 JSON.parse 报错。
-    const explicitType = url.searchParams.get('type');
-    const acceptsImage = (request.headers.get('Accept') || '').includes('image/');
-    const respType = explicitType || (acceptsImage ? 'img' : null);
+    const path = appendSizeParams('/file/' + picked.name, sizeParams);
+    const { respType, respForm } = parseResponseMode(request, url.searchParams);
 
     const cacheSec = Math.max(60, nextChangeIn); // 至少缓存 1 分钟，避免边界抖动
     const cacheHeader = `public, max-age=${cacheSec}`;
-    // Vary: Accept 确保 CDN 对 JSON 响应和图片响应分别缓存，避免 JSON 缓存污染图片请求
+    // Vary: Accept 确保 CDN 对 JSON 响应和图片响应分别缓存
     const varyHeader = { 'Vary': 'Accept' };
 
     if (respType === 'img') {
-        const r = await fetch(url.origin + path);
-        return new Response(r.body, {
-            status: r.status,
-            headers: {
-                'Content-Type': r.headers.get('content-type') || 'image/jpeg',
-                'Cache-Control': cacheHeader,
-                ...corsHeaders
-            }
-        });
+        return fetchImageWithRetry(url.origin + path, { 'Cache-Control': cacheHeader });
     }
 
     const finalUrl = respType === 'url' ? url.origin + path : path;
     if (respForm === 'text') {
         return new Response(finalUrl, {
             status: 200,
-            headers: { 'Cache-Control': cacheHeader, ...varyHeader, ...corsHeaders }
+            headers: { 'Cache-Control': cacheHeader, ...varyHeader }
         });
     }
-    return json({
+    return jsonResponse({
         interval,
         periodIndex,
         nextChangeIn,

@@ -25,62 +25,34 @@ import { fetchOthersConfig } from "../utils/sysConfig";
 import { readIndex } from "../utils/indexManager";
 import { getFacetsConfig } from "../utils/facetsConfig.js";
 import { checkPublicApiAuth } from "../utils/publicApiAuth.js";
-
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Max-Age': '86400',
-};
-
-const SQUARE_THRESHOLD = 0.1;
+import { isDirAllowed, SQUARE_THRESHOLD } from "../utils/filterPipeline.js";
+import { jsonResponse } from "../utils/responseHelper.js";
 
 export async function onRequest(context) {
     const { request, env } = context;
     const url = new URL(request.url);
 
-    if (request.method === 'OPTIONS') {
-        return new Response(null, { headers: corsHeaders });
-    }
     if (request.method !== 'GET') {
-        return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-            status: 405,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse({ error: 'Method not allowed' }, 405);
     }
 
     try {
         // 与 /random 复用同一个开关：随机图功能开启时才暴露 facets
         const othersConfig = await fetchOthersConfig(env);
         if (!othersConfig.randomImageAPI?.enabled) {
-            return new Response(JSON.stringify({ error: 'Random API is disabled' }), {
-                status: 403,
-                headers: { 'Content-Type': 'application/json', ...corsHeaders }
-            });
+            return jsonResponse({ error: 'Random API is disabled' }, 403);
         }
 
         // 可选认证检查
-        const authResponse = await checkPublicApiAuth(context, corsHeaders);
+        const authResponse = await checkPublicApiAuth(context);
         if (authResponse) return authResponse;
 
         const allowedDirRaw = othersConfig.randomImageAPI.allowedDir || '';
-        const allowedDirs = allowedDirRaw.split(',')
-            .map(s => s.trim().replace(/^\/+/, '').replace(/\/{2,}/g, '/').replace(/\/$/, ''))
-            .filter(s => s !== undefined);
 
         let dir = (url.searchParams.get('dir') || '').replace(/^\/+/, '').replace(/\/{2,}/g, '/').replace(/\/$/, '');
-        // 校验 dir 是否在允许范围内
-        let dirAllowed = false;
-        for (const ad of allowedDirs) {
-            if (ad === '' || dir === ad || dir.startsWith(ad + '/')) {
-                dirAllowed = true; break;
-            }
-        }
-        if (!dirAllowed) {
-            return new Response(JSON.stringify({ error: 'Directory not allowed' }), {
-                status: 403,
-                headers: { 'Content-Type': 'application/json', ...corsHeaders }
-            });
+        // 校验 dir 是否在允许范围内（复用公共函数）
+        if (!isDirAllowed(dir, allowedDirRaw)) {
+            return jsonResponse({ error: 'Directory not allowed' }, 403);
         }
 
         const countOnly = url.searchParams.get('countOnly') === 'true';
@@ -124,8 +96,7 @@ export async function onRequest(context) {
         }
 
         // 第二次扫描：为每个分面值挑选一张"样本图"（首张匹配即可）
-        // 给每个 value 一张样例 path，便于前端做色卡 UI
-        const sampleByFacetValue = new Map(); // facetValue -> filePath
+        const sampleByFacetValue = new Map();
         const facetsConfig = await getFacetsConfig(env);
         // 收集所有需要找样本的分面 tag
         const needSample = new Set();
@@ -178,18 +149,11 @@ export async function onRequest(context) {
             responseBody.allTags = allTags;
         }
 
-        return new Response(JSON.stringify(responseBody), {
-            headers: {
-                'Content-Type': 'application/json',
-                'Cache-Control': 'public, max-age=300',
-                ...corsHeaders
-            }
+        return jsonResponse(responseBody, 200, {
+            'Cache-Control': 'public, max-age=300',
         });
     } catch (err) {
         console.error('Error in /api/facets:', err);
-        return new Response(JSON.stringify({ error: 'Internal server error', message: err.message }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse({ error: 'Internal server error', message: err.message }, 500);
     }
 }

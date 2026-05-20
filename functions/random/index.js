@@ -11,27 +11,18 @@ import {
     parseImageSizeParams,
     appendSizeParams,
 } from "../utils/filterPipeline.js";
-
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Max-Age': '86400',
-};
+import {
+    jsonResponse,
+    fetchImageWithRetry,
+} from "../utils/responseHelper.js";
 
 export async function onRequest(context) {
     const { request, env } = context;
     const requestUrl = new URL(request.url);
 
-    if (request.method === 'OPTIONS') {
-        return new Response(null, { headers: corsHeaders });
-    }
-
     const othersConfig = await fetchOthersConfig(env);
     if (othersConfig.randomImageAPI?.enabled !== true) {
-        return new Response(JSON.stringify({ error: "Random is disabled" }), {
-            status: 403, headers: corsHeaders
-        });
+        return jsonResponse({ error: "Random is disabled" }, 403);
     }
     const allowedDirRaw = othersConfig.randomImageAPI.allowedDir || '';
 
@@ -41,9 +32,7 @@ export async function onRequest(context) {
     const sizeParams = parseImageSizeParams(requestUrl.searchParams);
 
     if (!isDirAllowed(params.dir, allowedDirRaw)) {
-        return new Response(JSON.stringify({ error: "Directory not allowed" }), {
-            status: 403, headers: corsHeaders
-        });
+        return jsonResponse({ error: "Directory not allowed" }, 403);
     }
 
     // 解析方向（含 auto 模式）
@@ -69,7 +58,7 @@ export async function onRequest(context) {
         finalList = beforeOrientation;
     }
 
-    const responseHeaders = new Headers(corsHeaders);
+    const responseHeaders = new Headers();
     if (params.isAutoMode) {
         addClientHintsHeaders(responseHeaders);
     }
@@ -109,19 +98,9 @@ export async function onRequest(context) {
     }
 
     if (randomType === 'img') {
-        randomUrl = requestUrl.origin + randomPath;
-        let contentType = 'image/jpeg';
-        const imgHeaders = new Headers(responseHeaders);
-        return new Response(await fetch(randomUrl).then(res => {
-            contentType = res.headers.get('content-type');
-            return res.blob();
-        }), {
-            headers: (() => {
-                imgHeaders.set('Content-Type', contentType || 'image/jpeg');
-                return imgHeaders;
-            })(),
-            status: 200
-        });
+        const extraHeaders = {};
+        responseHeaders.forEach((v, k) => { extraHeaders[k] = v; });
+        return fetchImageWithRetry(requestUrl.origin + randomPath, extraHeaders);
     }
 
     if (resType === 'text') {
