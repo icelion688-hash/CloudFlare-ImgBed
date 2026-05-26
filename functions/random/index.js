@@ -59,6 +59,8 @@ export async function onRequest(context) {
     }
 
     const responseHeaders = new Headers();
+    // /random 每次返回不同结果，禁止缓存
+    responseHeaders.set('Cache-Control', 'no-store');
     if (params.isAutoMode) {
         addClientHintsHeaders(responseHeaders);
     }

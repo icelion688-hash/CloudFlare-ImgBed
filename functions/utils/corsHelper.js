@@ -58,6 +58,7 @@ export function buildCorsHeaders(request, allowedDomains, selfHostname, options 
         'Access-Control-Allow-Methods': options.methods || 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': options.headers || 'Content-Type, Authorization, authCode',
         'Access-Control-Max-Age': '86400',
+        'Timing-Allow-Origin': '*',
     };
 
     const origin = resolveAllowedOrigin(request, allowedDomains, selfHostname);

@@ -11,6 +11,7 @@ import {
 } from './fileTools';
 import { getDatabase } from '../utils/databaseAdapter.js';
 import { authenticate, AUTH_SCOPE } from '../utils/auth/authCore.js';
+import { snapWidth, snapBlur, snapFormat, snapQuality, snapHeight } from '../utils/validateParams.js';
 
 // 图片缩放预设尺寸
 const SIZE_PRESETS = {
@@ -44,16 +45,18 @@ function parseImageParams(url) {
     // 检查是否有独立的缩放参数
     const w = params.get('w');
     const h = params.get('h');
-    if (!w && !h) {
+    const blur = params.get('blur');
+    if (!w && !h && !blur) {
         return null; // 没有缩放参数
     }
 
     return {
-        width: w ? parseInt(w, 10) : undefined,
-        height: h ? parseInt(h, 10) : undefined,
-        quality: parseInt(params.get('q'), 10) || 80,
-        format: params.get('f') || 'auto',
+        width: w ? snapWidth(w) : undefined,
+        height: h ? snapHeight(h) : undefined,
+        quality: snapQuality(params.get('q')),
+        format: snapFormat(params.get('f')),
         fit: params.get('fit') || 'scale-down',
+        blur: blur ? snapBlur(blur) : undefined,
     };
 }
 
@@ -74,7 +77,7 @@ export async function onRequest(context) {
 
     // 构建不带缩放参数的原始 URL，用于 cf.image 重新请求
     const originalUrl = new URL(url);
-    ['w', 'h', 'q', 'f', 'fit', 'size', '__no_transform'].forEach(k => originalUrl.searchParams.delete(k));
+    ['w', 'h', 'q', 'f', 'fit', 'size', 'blur', '__no_transform'].forEach(k => originalUrl.searchParams.delete(k));
     originalUrl.searchParams.set('__no_transform', '1');
 
     try {
@@ -84,12 +87,15 @@ export async function onRequest(context) {
         if (imageParams.quality) cfOptions.image.quality = imageParams.quality;
         if (imageParams.format) cfOptions.image.format = imageParams.format;
         if (imageParams.fit) cfOptions.image.fit = imageParams.fit;
+        if (imageParams.blur) cfOptions.image.blur = imageParams.blur;
 
         const transformed = await fetch(originalUrl.toString(), { cf: cfOptions });
         if (transformed.ok) {
             const headers = new Headers(transformed.headers);
             headers.set('X-Image-Resized', 'true');
-            headers.set('Cache-Control', 'public, max-age=86400');
+            // 派生图使用长缓存 + immutable（内容由参数唯一确定）
+            headers.set('Cache-Control', 'public, max-age=2592000, immutable');
+            headers.set('Vary', 'Accept');
             return new Response(transformed.body, { status: 200, headers });
         }
     } catch (e) {

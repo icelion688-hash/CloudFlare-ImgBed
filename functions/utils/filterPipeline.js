@@ -10,6 +10,7 @@
  */
 import { readIndex } from "./indexManager.js";
 import { resolveFacetValue, getFacetsConfig } from "./facetsConfig.js";
+import { snapWidth, snapBlur, snapFormat, snapQuality, snapHeight } from "./validateParams.js";
 
 export const SQUARE_THRESHOLD = 0.1;
 
@@ -303,16 +304,19 @@ export function parseImageSizeParams(sp) {
     const q = sp.get('q');
     const f = sp.get('f');
 
+    const blur = sp.get('blur');
+
     // 如果没有任何尺寸参数，返回 null
-    if (!size && !w && !h && !q && !f) return null;
+    if (!size && !w && !h && !q && !f && !blur) return null;
     if (size === 'original') return null;
 
     const preset = SIZE_PRESETS[size] || {};
     return {
-        w: parseInt(w, 10) || preset.w || null,
-        h: parseInt(h, 10) || null,
-        q: parseInt(q, 10) || preset.q || null,
-        f: f || null,
+        w: snapWidth(w) || preset.w || null,
+        h: snapHeight(h) || null,
+        q: snapQuality(q || preset.q) || null,
+        f: snapFormat(f) || null,
+        blur: snapBlur(blur) || null,
     };
 }
 
@@ -329,6 +333,7 @@ export function appendSizeParams(path, sizeParams) {
     if (sizeParams.h) parts.push('h=' + sizeParams.h);
     if (sizeParams.q) parts.push('q=' + sizeParams.q);
     if (sizeParams.f) parts.push('f=' + sizeParams.f);
+    if (sizeParams.blur) parts.push('blur=' + sizeParams.blur);
     if (parts.length === 0) return path;
     const sep = path.includes('?') ? '&' : '?';
     return path + sep + parts.join('&');

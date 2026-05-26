@@ -79,7 +79,7 @@ export function setCommonHeaders(headers, encodedFileName, fileType, cacheContro
     // CORS 头由 _middleware.js 中的 corsHandler 统一设置（支持 allowedDomains 白名单），
     // 此处不再硬编码 Access-Control-Allow-Origin，避免覆盖中间件的动态策略。
     headers.set('Accept-Ranges', 'bytes');
-    headers.set('Vary', 'Range');
+    headers.set('Vary', 'Range, Accept');
 
     if (fileType) {
         headers.set('Content-Type', fileType);

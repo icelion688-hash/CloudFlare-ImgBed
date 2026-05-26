@@ -1,0 +1,41 @@
+# ============================================================
+# Cloudflare Pages 响应头配置
+# 用途：CDN 缓存策略 + CORS + 安全头
+# ============================================================
+
+# --- 全局默认 ---
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+  Timing-Allow-Origin: *
+
+# --- 静态资源：长缓存 ---
+/static/*
+  Cache-Control: public, max-age=2592000, immutable
+
+# --- 前端构建产物：长缓存（文件名含 hash） ---
+/js/*
+  Cache-Control: public, max-age=31536000, immutable
+/css/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# --- Random API：每次刷新模式，禁止缓存 ---
+/random
+  Cache-Control: no-store
+
+# --- Random API：定时模式（实际 max-age 由 Functions 动态设置，此处为兜底） ---
+/random/interval
+  Cache-Control: public, max-age=3600, s-maxage=3600
+
+# --- Random API：每日一图（兜底值，Functions 会覆盖为精确的剩余秒数） ---
+/random/daily
+  Cache-Control: public, max-age=86400, s-maxage=86400
+
+# --- Random API：相似图推荐 ---
+/random/similar
+  Cache-Control: public, max-age=300
+
+# --- Random API：批量预取 ---
+/random/precompute
+  Cache-Control: public, max-age=3600, s-maxage=3600
