@@ -6,6 +6,7 @@
  *
  * 查询参数：
  *   interval  刷新间隔秒数（必填，60~604800）
+ *   type      url → 返回完整 URL（含 scheme+host），否则返回相对路径
  *   过滤参数  同 /random（color/category/mood/tags/dir/orientation/minWidth/...）
  *   hdw       HD 图宽度（默认 1920）
  *   lqipw     LQIP 图宽度（默认 40）
@@ -13,8 +14,8 @@
  *
  * 响应：
  *   {
- *     lqip: "/file/xxx?w=40&blur=20",
- *     hd: "/file/xxx?w=1920",
+ *     lqip: "https://host/file/xxx?w=40&blur=20&q=60&f=auto",
+ *     hd:   "https://host/file/xxx?w=1920&f=auto",
  *     meta: { width, height, tags },
  *     ttl: 3600,
  *     nextChangeIn: 1234
@@ -107,10 +108,35 @@ export async function onRequest(context) {
     const lqipBlur = snapBlur(url.searchParams.get('lqipblur') || '20') || 20;
 
     const basePath = '/file/' + picked.name;
-    const lqipUrl = `${basePath}?w=${lqipWidth}&blur=${lqipBlur}&q=60&f=auto`;
-    const hdUrl = `${basePath}?w=${hdWidth}&f=auto`;
+    const lqipPath = `${basePath}?w=${lqipWidth}&blur=${lqipBlur}&q=60&f=auto`;
+    const hdPath = `${basePath}?w=${hdWidth}&f=auto`;
+
+    // type=url 时返回完整 URL（前端强烈建议默认行为）
+    const useFullUrl = url.searchParams.get('type') === 'url';
+    const prefix = useFullUrl ? url.origin : '';
+    const lqipUrl = prefix + lqipPath;
+    const hdUrl = prefix + hdPath;
 
     const cacheSec = Math.max(60, nextChangeIn);
+
+    // ETag：基于 seed 生成弱验证标签，同周期内浏览器可用 304
+    const etag = `W/"${seed}"`;
+
+    // 检查 If-None-Match（304 缓存）
+    const ifNoneMatch = request.headers.get('If-None-Match');
+    if (ifNoneMatch && ifNoneMatch === etag) {
+        return new Response(null, {
+            status: 304,
+            headers: {
+                'ETag': etag,
+                'Cache-Control': `public, max-age=${cacheSec}, s-maxage=${cacheSec}`,
+            },
+        });
+    }
+
+    // Link preload 提示：让浏览器在解析 JSON 前就开始预取图片
+    const hdFullUrl = url.origin + hdPath;
+    const lqipFullUrl = url.origin + lqipPath;
 
     return jsonResponse({
         lqip: lqipUrl,
@@ -126,5 +152,7 @@ export async function onRequest(context) {
     }, 200, {
         'Cache-Control': `public, max-age=${cacheSec}, s-maxage=${cacheSec}`,
         'Vary': 'Accept',
+        'ETag': etag,
+        'Link': `<${hdFullUrl}>; rel="preload"; as="image"; fetchpriority="high", <${lqipFullUrl}>; rel="preload"; as="image"`,
     });
 }
