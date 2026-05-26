@@ -36,7 +36,7 @@ import {
     jsonResponse,
     buildFilterFingerprint,
 } from "../utils/responseHelper.js";
-import { snapWidth, snapBlur } from "../utils/validateParams.js";
+import { snapWidth, snapBlur, snapFormat } from "../utils/validateParams.js";
 
 export async function onRequest(context) {
     const { request, env } = context;
@@ -106,10 +106,12 @@ export async function onRequest(context) {
     const hdWidth = snapWidth(url.searchParams.get('hdw') || '1920') || 1920;
     const lqipWidth = snapWidth(url.searchParams.get('lqipw') || '40') || 40;
     const lqipBlur = snapBlur(url.searchParams.get('lqipblur') || '20') || 20;
+    // OPT-06: 读取 f 参数并应用到 URL，避免前端 forceFormat 兜底导致缓存碎片
+    const format = snapFormat(url.searchParams.get('f') || 'auto');
 
     const basePath = '/file/' + picked.name;
-    const lqipPath = `${basePath}?w=${lqipWidth}&blur=${lqipBlur}&q=60&f=auto`;
-    const hdPath = `${basePath}?w=${hdWidth}&f=auto`;
+    const lqipPath = `${basePath}?w=${lqipWidth}&blur=${lqipBlur}&q=60&f=${format}`;
+    const hdPath = `${basePath}?w=${hdWidth}&f=${format}`;
 
     // type=url 时返回完整 URL（前端强烈建议默认行为）
     const useFullUrl = url.searchParams.get('type') === 'url';
@@ -119,8 +121,8 @@ export async function onRequest(context) {
 
     const cacheSec = Math.max(60, nextChangeIn);
 
-    // ETag：基于 seed 生成弱验证标签，同周期内浏览器可用 304
-    const etag = `W/"${seed}"`;
+    // ETag：基于 seed + format 生成弱验证标签，同周期 + 同格式 → 同 ETag
+    const etag = `W/"${seed}-${format}"`;
 
     // 检查 If-None-Match（304 缓存）
     const ifNoneMatch = request.headers.get('If-None-Match');
