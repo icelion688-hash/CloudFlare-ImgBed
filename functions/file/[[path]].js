@@ -90,19 +90,36 @@ export async function onRequest(context) {
         if (imageParams.blur) cfOptions.image.blur = imageParams.blur;
 
         const transformed = await fetch(originalUrl.toString(), { cf: cfOptions });
+
         if (transformed.ok) {
+            const contentType = transformed.headers.get('content-type') || '';
+            // 判断 cf.image 是否真正生效：检查响应头中是否有转换痕迹
+            const actuallyTransformed = transformed.headers.has('cf-resized')
+                || (imageParams.format === 'auto' && (contentType.includes('webp') || contentType.includes('avif')))
+                || (imageParams.width && transformed.headers.get('cf-resized'));
+
             const headers = new Headers(transformed.headers);
-            headers.set('X-Image-Resized', 'true');
+            headers.set('X-Image-Resized', actuallyTransformed ? 'true' : 'fallback');
             // 派生图使用长缓存 + immutable（内容由参数唯一确定）
             headers.set('Cache-Control', 'public, max-age=2592000, immutable');
             headers.set('Vary', 'Accept');
+
+            // HEAD 请求：只返回头部，不传输 body
+            if (request.method === 'HEAD') {
+                return new Response(null, { status: 200, headers });
+            }
+
             return new Response(transformed.body, { status: 200, headers });
         }
     } catch (e) {
-        // cf.image 不可用（如免费版），fallback 返回原图
+        // cf.image 不可用（如免费版），fallback 到软件处理
     }
 
-    // fallback: 返回原图
+    // cf.image 不可用时的软件降级处理
+    // 虽然无法做图片缩放，但可以正确处理 HEAD 请求和返回原图
+    if (request.method === 'HEAD') {
+        return await handleFileRequest(context);
+    }
     return await handleFileRequest(context);
 }
 
